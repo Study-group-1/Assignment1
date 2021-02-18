@@ -1,0 +1,260 @@
+---
+title: "Computational Modeling - Assignment 1"
+author: "Riccardo Fusaroli"
+date: "07/01/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+```
+
+## In this assignment we learn how to assess rates from a binomial distribution, using the case of assessing your teachers' knowledge of CogSci
+
+N.B. this markdown has 2 parts as it spans 2 weeks of teaching
+
+### First part
+
+You want to assess your teachers' knowledge of cognitive science. "These guys are a bunch of drama(turgist) queens, mindless philosophers, chattering communication people and Russian spies. Do they really know CogSci?", you think.
+
+To keep things simple (your teachers should not be faced with too complicated things):
+- You created a pool of equally challenging questions on CogSci
+- Each question can be answered correctly or not (we don't allow partially correct answers, to make our life simpler).
+- Knowledge of CogSci can be measured on a scale from 0 (negative knowledge, all answers wrong) through 0.5 (random chance) to 1 (awesome CogSci superpowers)
+
+This is the data:
+- Riccardo: 3 correct answers out of 6 questions
+- Kristian: 2 correct answers out of 2 questions (then he gets bored)
+- Daina: 160 correct answers out of 198 questions (Daina never gets bored)
+- Mikkel: 66 correct answers out of 132 questions
+
+Questions:
+
+1. What's Riccardo's estimated knowledge of CogSci? What is the probability he knows more than chance (0.5) [try figuring this out. If you can't, peek into chapters 3.1 and 3.2 and/or the slides]?
+- First implement a grid approximation (hint check paragraph 2.4.1!) with a uniform prior, calculate the posterior and plot the results
+- Then implement a quadratic approximation (hint check paragraph 2.4.2!).
+- N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
+
+```{r Astrid}
+dens <- 20 
+p_grid <- seq(from = 0, to = 1, length.out = dens)
+
+#prior <- rep(1, dens)
+prior <- dnorm(p_grid, 0.5, 0.1)
+
+dens(rbinom(1e4, 9, runif(1e4, 0, 1)))
+#dens(rbinom(1e4, 9, runif(1e4, 0.5, 1)))
+#dens(rbinom(1e4, 9, runif(1e4, 0.5, 0.1)))
+
+likelihood <- dbinom(3, size = 6, prob = p_grid)
+
+unstd.posterior <- likelihood*prior
+
+posterior <- unstd.posterior/sum(unstd.posterior)
+
+d<- data.frame(grid = p_grid, posterior = posterior, prior = prior, likelihood = likelihood)
+ggplot(d, aes(grid, posterior))+ geom_point() + geom_line() + theme_classic() + geom_line(aes(grid, prior/dens), color = 'red') + xlab("Knowledge of CogSci") + ylab("Posterior Probability")
+```
+Quadratic Approximation 
+```{r Morten}
+globe.qa <- map(
+  alist(
+      w ~ dbinom(6,p) , # binomial likelihood 
+      p ~ dunif(0,1) # uniform prior
+    ), data=list(w=3) )
+
+# display summary of quadratic approximation 
+precis( globe.qa )
+
+# analytical calculation
+w <- 3
+n <- 6
+curve( dbeta( x , w+1 , n-w+1 ) , from=0 , to=1 ) 
+# quadratic approximation
+curve( dnorm( x , 0.5 , 0.2 ) , lty=2 , add=TRUE )
+```
+
+With the expectation (prior) that CogSci teachers answer more than half than CogSci related questions correctly,the probability that Riccardo knows more than 50% of the answers is 50%. 
+
+2. Estimate all the teachers' knowledge of CogSci. Who's best? Use grid approximation. Comment on the posteriors of Riccardo and Mikkel.
+2a. Produce plots of the prior, and posterior for each teacher.
+```{r Nicoline}
+#We'll make a function to not be coding-slaves ;) 
+bayes_function <- function(correct, size, prior, p_grid) {
+  likelihood = dbinom(correct, size = size, prob = p_grid)
+  unstd.posterior <- likelihood * prior
+  posterior <- unstd.posterior / sum(unstd.posterior)
+  df <- data.frame(grid = p_grid, posterior = posterior, prior = prior, likelihood = likelihood)
+  
+  plot <- ggplot(df, aes(grid, posterior)) +  geom_point() +geom_line() + theme_classic() + geom_line(aes(grid, prior/dens),color= 'red') + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+  
+  above50 <- sum(posterior[11:20])
+  
+  list <- list(plot, unstd.posterior,above50)
+  
+  return(list)
+}
+
+R <- bayes_function(3, 6, prior, p_grid) #Riccardo
+K <- bayes_function(2, 2, prior, p_grid) #Kristian 
+D <- bayes_function(160, 198, prior, p_grid) #Daina 
+M <- bayes_function(66, 132, prior, p_grid) #Mikkel
+
+#the posteriors of above 50% correct
+R[3]
+K[3]
+D[3]
+M[3]
+```
+The posterior that the teachers know more than 50% of the answers, given these priors, are : 50% for Riccardo, 66% for Kristian, 100% for Diana and 50% for Mikkel.
+
+With the same prior (CogSci teachers know more than half the answers), we predict that Daina is the safest bet for a teacher who knows the answers to more than half the questions.
+
+It makes sense that we stil expect that Mikkel and Riccardo will get 50% of the answers correct. Since the prior expects this and the data confirms this.
+
+3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
+
+3a. Produce plots of the prior and posterior for each teacher.
+```{r Tobias}
+new_prior <- dnorm(p_grid, 0.8, 0.2)
+
+R2 <- bayes_function(3, 6, new_prior, p_grid) #Riccardo
+K2 <- bayes_function(2, 2, new_prior, p_grid) #Kristian 
+D2 <- bayes_function(160, 198, new_prior, p_grid) #Daina 
+M2 <- bayes_function(66, 132, new_prior, p_grid) #Mikkel 
+
+R2[3]
+K2[3]
+D2[3]
+M2[3]
+
+```
+
+
+4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why?
+```{r Magnus}
+#define uniform prior
+uni_prior <-rep(1,dens) 
+
+# with uniform prior
+R100U <- bayes_function(300, 600, uni_prior, p_grid) #Riccardo
+K100U <- bayes_function(200, 200, uni_prior, p_grid) #Kristian 
+D100U <- bayes_function(16000, 19800, uni_prior, p_grid) #Daina 
+M100U <- bayes_function(6600, 13200, uni_prior, p_grid) #Mikkel 
+
+# with new prior
+R100N <- bayes_function(300, 600, new_prior, p_grid) #Riccardo
+K100N <- bayes_function(200, 200, new_prior, p_grid) #Kristian 
+D100N <-bayes_function(16000, 19800, new_prior, p_grid) #Daina 
+M100N <- bayes_function(6600, 13200, new_prior, p_grid) #Mikkel 
+
+R100U[3]
+R100N[3]
+R2[3]
+K100U[3]
+K100N[3]
+K2[3]
+D100U[3] 
+D100N[3]
+D2[3]
+M100U[3]
+M100N[3]
+M2[3]
+```
+
+The posterior probability change for all except for Daina, who already has 100%, more data just makes it more certain.
+
+For the uniform prior for Riccardo and Mikkel, even with much more data the posterior probability stay at 50% for above 50% correct, since the data confirms the prior.
+With more data, the posterior probabilty of getting more than 50% correct gets lower for Riccardo and Mikkel, since the likelihood of 50% precisely gets higher (the plot gets more steep). 
+
+Krisitan stays basically the same (a bit higher with more data), since he outperforms the prior.
+ 
+5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief?
+
+We would set my priors quite low, since we would have data that supports this claim. 
+
+```{r Tobias}
+skeptic_prior <- dnorm(p_grid, 0.1, 0.1)
+bayes_function(3, 6, skeptic_prior, p_grid) #Riccardo
+bayes_function(2, 2, skeptic_prior, p_grid) #Kristian 
+bayes_function(160, 198, skeptic_prior, p_grid) #Daina 
+bayes_function(66, 132, skeptic_prior, p_grid) #Mikkel 
+```
+
+### Second part: Focusing on predictions
+
+Last year you assessed the teachers (darned time runs quick!). Now you want to re-test them and assess whether your models are producing reliable predictions. In Methods 3 we learned how to do machine-learning style assessment of predictions (e.g. rmse on testing datasets). Bayesian stats makes things a bit more complicated. So we'll try out how that works. N.B. You can choose which prior to use for the analysis of last year's data.
+
+Questions to be answered (but see guidance below):
+1 - Write a paragraph discussing how assessment of prediction performance is different in Bayesian vs. frequentist models
+
+In frequentist models we measured prediction performance using rmse. We employed a general linear model and tested the accuracy of the model on new data. The output of this process was then the root mean squared error. This measure was evaluated against the rmse-value of other models. 
+
+In Bayesian models, the performance is measured differently. The output of the Bayesian workflow is a posterior probability distribution. If we want to measure the accuracy of such distribution, we can evaluate the probability of some actual outcome given our posterior distribution. A high probability indicates the distribution characterizes the underlying parameter accurately. 
+
+Furthermore, we can update our model and compare the posterior to the prior. If the two are astoundingly different, it would indicate that our model predicts the new data quite poorly.
+
+2 - Provide at least one plot and one written line discussing prediction errors for each of the teachers.
+
+This is the old data:
+- Riccardo: 3 correct answers out of 6 questions
+- Kristian: 2 correct answers out of 2 questions (then he gets bored)
+- Daina: 160 correct answers out of 198 questions (Daina never gets bored)
+- Mikkel: 66 correct answers out of 132 questions
+
+This is the new data:
+- Riccardo: 9 correct answers out of 10 questions (then he freaks out about teaching preparation and leaves)
+- Kristian: 8 correct answers out of 12 questions
+- Daina: 148 correct answers out of 172 questions (again, Daina never gets bored)
+- Mikkel: 34 correct answers out of 65 questions
+
+Guidance Tips
+
+1. There are at least two ways of assessing predictions.
+2. Last year's results are this year's expectations.
+3. Are the parameter estimates changing? (way 1)
+4. How does the new data look in last year's predictive posterior? (way 2)
+
+```{r Nicoline, Astrid, Morten}
+
+# new function with old posterior possibility
+bayes_function1 <- function(correct, size, prior, p_grid) {
+  likelihood = dbinom(correct, size = size, prob = p_grid)
+  unstd.posterior <- likelihood * prior
+  posterior <- unstd.posterior / sum(unstd.posterior)
+  df <- data.frame(grid = p_grid, posterior = posterior, prior = prior, likelihood = likelihood)
+  
+  plot <- ggplot(df, aes(grid, posterior)) +  geom_point() +geom_line() + theme_classic() + geom_line(aes(grid, prior/sum(prior)),color= 'red') + xlab("Knowledge of CogSci")+ ylab("posterior probability")
+  
+  list <- list(plot, unstd.posterior)
+  
+  return(list)
+}
+
+#The old data
+M_likelihood <- dbinom(66,size=132,prob=p_grid)
+K_likelihood <- dbinom(2,size=2,prob=p_grid)
+D_likelihood <- dbinom(160,size=198,prob=p_grid)
+R_likelihood <- dbinom(3,size=6,prob=p_grid)
+
+#compute the posterios
+M_unstd.posterior <- M_likelihood*prior
+K_unstd.posterior <- K_likelihood*prior
+D_unstd.posterior <- D_likelihood*prior
+R_unstd.posterior <- R_likelihood*prior
+
+#standardize the posterior
+M_posterior <- M_unstd.posterior / sum(M_unstd.posterior)
+K_posterior <- K_unstd.posterior / sum(K_unstd.posterior)
+D_posterior <- D_unstd.posterior / sum(D_unstd.posterior)
+R_posterior <- R_unstd.posterior / sum(R_unstd.posterior)
+
+#See new data with prior as the posterior from part 1 of the assignment 
+bayes_function1(34,65, M_unstd.posterior, p_grid) #Mikkel
+bayes_function1(8,12, K_unstd.posterior, p_grid) #Kristian
+bayes_function1(148,172, D_unstd.posterior, p_grid) #Daina
+bayes_function1(9,10, R_unstd.posterior, p_grid) #Riccardo
+```
+
+We see that the probabilities predicted by our last year model that our teachers would get the results that they got this year are very high. Except for Kristian, who did worse this year, since he answered more questions and didn't get a perfect score.
